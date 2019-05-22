@@ -6,9 +6,11 @@ import warnings
 from functools import wraps
 from itertools import count
 
-from django.db import connections, router, transaction
+from django.db import connections, router, transaction, connection
 from django.db import models
 from django.conf import settings
+
+from django.db.utils import OperationalError as django_operational_error
 
 from celery.five import items
 
@@ -48,6 +50,10 @@ def transaction_retry(max_retries=1):
             for retries in count(0):
                 try:
                     return fun(*args, **kwargs)
+                except django_operational_error:
+                    connection.close()
+                    if retries >= _max_retries:
+                        raise
                 except Exception:   # pragma: no cover
                     # Depending on the database backend used we can experience
                     # various exceptions. E.g. psycopg2 raises an exception
